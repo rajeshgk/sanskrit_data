@@ -1,7 +1,7 @@
 import logging
 import os
 import subprocess
-import urllib.request
+import urllib
 
 logging.basicConfig(
   level=logging.DEBUG,

@@ -17,7 +17,7 @@ from jsonschema import ValidationError
 from jsonschema import SchemaError
 
 logging.basicConfig(
-  level=logging.DEBUG,
+  level=logging.INFO,
   format="%(levelname)s: %(asctime)s {%(filename)s:%(lineno)d}: %(message)s "
 )
 
@@ -140,7 +140,7 @@ class JsonObject(object):
   def make_from_pickledstring(cls, pickle):
     input_str = pickle
     if not isinstance(pickle, str):
-      input_str = str(pickle,'utf-8')
+      input_str = str(pickle).encode('utf-8')
     if input_str.strip().startswith("["):
       return cls.make_from_dict_list(jsonpickle.decode(pickle))
     else:
@@ -159,7 +159,7 @@ class JsonObject(object):
           obj = cls.make_from_dict_list(jsonpickle.decode(fhandle.read()))
           return obj
       except Exception as e:
-        logging.error("Error reading " + filename + " : ".format(e))
+        logging.error("Error reading {}: {}".format(filename, e))
         raise e
 
   def dump_to_file(self, filename):
@@ -454,7 +454,7 @@ class DataSource(JsonObject):
 
   def __init__(self):
     """Set the default properties"""
-    super().__init__()
+    super(DataSource, self).__init__()
     # noinspection PyTypeChecker
     self.source_type = self.schema["properties"]["source_type"]["default"]
 

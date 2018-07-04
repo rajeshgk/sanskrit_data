@@ -24,7 +24,7 @@ from sanskrit_data.schema.books import BookPortion, CreationDetails
 from sanskrit_data.schema.common import JsonObject, UllekhanamJsonObject, Target, DataSource, Text, NamedEntity
 
 logging.basicConfig(
-  level=logging.DEBUG,
+  level=logging.INFO,
   format="%(levelname)s: %(asctime)s {%(filename)s:%(lineno)d}: %(message)s "
 )
 

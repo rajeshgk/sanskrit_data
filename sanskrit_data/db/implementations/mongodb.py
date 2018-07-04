@@ -56,7 +56,7 @@ class Collection(DbInterface):
       yield result
 
   def update_doc(self, doc):
-    from pymongo import ReturnDocument
+    from pymongo.collection import ReturnDocument
     if "_id" in doc:
       filter_dict = {"_id": ObjectId(doc["_id"])}
       doc.pop("_id", None)
@@ -71,7 +71,7 @@ class Collection(DbInterface):
     self.mongo_collection.delete_one({"_id": ObjectId(doc_id)})
 
   def add_index(self, keys_dict, index_name):
-    self.mongo_collection.create_index(keys=list(keys_dict.items()), name=index_name, background=True)
+    self.mongo_collection.create_index(list(keys_dict.items()), name=index_name, background=True)
 
 
 def _fix_id(doc):

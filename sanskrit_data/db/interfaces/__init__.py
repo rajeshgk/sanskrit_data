@@ -1,4 +1,6 @@
 import logging
+import os
+import errno
 
 logging.basicConfig(
   level=logging.DEBUG,
@@ -52,7 +54,14 @@ class DbInterface(object):
       logging.info("Initializing work directory ...")
       import os
       # noinspection PyArgumentList
-      os.makedirs(name=self.external_file_store, exist_ok=True)
+      #os.makedirs(name=self.external_file_store, exist_ok=True)
+      try:
+        os.makedirs(name=self.external_file_store)
+      except OSError as e:
+        if e.errno == errno.EEXIST and os.path.isdir(self.external_file_store):
+            pass
+        else:
+            raise
 
   def update_doc(self, doc):
     """ Update or insert a json object, represented as a dict.

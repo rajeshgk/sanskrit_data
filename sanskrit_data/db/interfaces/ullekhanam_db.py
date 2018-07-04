@@ -93,7 +93,7 @@ class BookPortionsInterface(DbInterface):
 
     # Create segments taking into account known_segments
     detected_regions = page_image.find_text_regions()
-    logging.info("Matches = " + str(detected_regions))
+    #logging.info("Matches = " + str(detected_regions))
 
     new_annotations = []
     for region in detected_regions:
