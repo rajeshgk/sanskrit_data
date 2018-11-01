@@ -27,7 +27,7 @@ setup(
   # Versions should comply with PEP440.  For a discussion on single-sourcing
   # the version across setup.py and the project code, see
   # https://packaging.python.org/en/latest/single_source_version.html
-  version='0.4.5',
+  version='0.4.6',
 
   description='Standard and idiosyncratic schemata for text, annotation and user data, with a library of validation, (de-)serialization, a database interface and other utilities.',
   long_description=long_description,
@@ -94,9 +94,7 @@ setup(
     # Idea: Rather than automatically install unnecessary database access modules (users may only be interested in interacting with a particular database through the interface), we should let them install them separately.
     # But this idea is rejected because this breaks automatic sphinx documentation at readthedocs.
 
-    'cloudant',
-    # 'couchdb-python', # But ALERT: we're using an unreleased version; a distribution does not exist for Py3.5 as of 20170828.
-    'pymongo', # Includes the bson package.
+    'objectdb',
     'six',
   ],
 

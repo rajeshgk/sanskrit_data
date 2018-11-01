@@ -9,4 +9,4 @@ Sub-modules in decreasing order of interest are:
 Please view the respective documentations for details.
 """
 
-__all__ = ["schema", "db"]
+__all__ = ["schema"]

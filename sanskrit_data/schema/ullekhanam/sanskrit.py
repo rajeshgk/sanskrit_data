@@ -150,10 +150,10 @@ class TextSambandhaAnnotation(Annotation):
     "required": ["combined_string"]
   }))
 
-  def validate(self, db_interface=None, user=None):
-    super(TextSambandhaAnnotation, self).validate(db_interface=db_interface, user=user)
-    Target.check_target_classes(targets_to_check=self.source_text_padas, allowed_types=[PadaAnnotation], db_interface=db_interface, targeting_obj=self)
-    Target.check_target_classes(targets_to_check=self.target_text_padas, allowed_types=[PadaAnnotation], db_interface=db_interface, targeting_obj=self)
+  def validate(self, my_collection=None, user=None):
+    super(TextSambandhaAnnotation, self).validate(my_collection=my_collection, user=user)
+    Target.check_target_classes(targets_to_check=self.source_text_padas, allowed_types=[PadaAnnotation], my_collection=my_collection, targeting_obj=self)
+    Target.check_target_classes(targets_to_check=self.target_text_padas, allowed_types=[PadaAnnotation], my_collection=my_collection, targeting_obj=self)
 
   @classmethod
   def get_allowed_target_classes(cls):
@@ -212,9 +212,9 @@ class SamaasaAnnotation(Annotation):
   def get_allowed_target_classes(cls):
     return [PadaAnnotation]
 
-  def validate(self, db_interface=None, user=None):
-    super(SamaasaAnnotation, self).validate(db_interface=db_interface, user=user)
-    Target.check_target_classes(targets_to_check=self.component_padas, allowed_types=[PadaAnnotation], db_interface=db_interface, targeting_obj=self)
+  def validate(self, my_collection=None, user=None):
+    super(SamaasaAnnotation, self).validate(my_collection=my_collection, user=user)
+    Target.check_target_classes(targets_to_check=self.component_padas, allowed_types=[PadaAnnotation], my_collection=my_collection, targeting_obj=self)
 
   @classmethod
   def from_details(cls, targets, source, combined_string, samaasa_type="UNK"):

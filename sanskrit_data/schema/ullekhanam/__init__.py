@@ -141,9 +141,9 @@ class ImageTarget(Target):
 
 class ValidationAnnotationSource(DataSource):
   """We don't override the schema here as no new fields are added."""
-  def setup_source(self, db_interface=None, user=None):
-    self.infer_by_admin(db_interface=db_interface, user=user)
-    super(ValidationAnnotationSource, self).setup_source(db_interface=db_interface, user=user)
+  def setup_source(self, my_collection=None, user=None):
+    self.infer_by_admin(my_collection=my_collection, user=user)
+    super(ValidationAnnotationSource, self).setup_source(my_collection=my_collection, user=user)
 
 
 class ValidationAnnotation(Annotation):
@@ -223,9 +223,9 @@ class TextAnnotation(Annotation):
     return annotation
 
   @classmethod
-  def add_indexes(cls, db_interface):
-    super(TextAnnotation, cls).add_indexes(db_interface=db_interface)
-    db_interface.add_index(keys_dict={
+  def add_indexes(cls, my_collection):
+    super(TextAnnotation, cls).add_indexes(my_collection=my_collection)
+    my_collection.create_index(keys_dict={
       "content.search_strings": 1
     }, index_name="content_search_strings")
 

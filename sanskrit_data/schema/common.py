@@ -16,6 +16,8 @@ import jsonschema
 from jsonschema import ValidationError
 from jsonschema import SchemaError
 
+from .helper import MyDbCollectionAdapter
+
 logging.basicConfig(
   level=logging.INFO,
   format="%(levelname)s: %(asctime)s {%(filename)s:%(lineno)d}: %(message)s "
@@ -184,17 +186,6 @@ class JsonObject(object):
   def get_json_map_list(cls, some_list):
     return [item.to_json_map() for item in some_list]
 
-  def get_external_storage_path(self, db_interface):
-    """Get the directory path where files associated with this object are to be stored."""
-    import os
-    return os.path.join(db_interface.external_file_store, self._id)
-
-  def list_files(self, db_interface, suffix_pattern="*"):
-    import glob
-    import os
-    file_list = glob.glob(pathname=os.path.join(self.get_external_storage_path(db_interface=db_interface), suffix_pattern))
-    return [os.path.basename(f) for f in file_list]
-
   def set_type(self):
     # self.class_type = str(self.__class__.__name__)
     setattr(self, TYPE_FIELD, self.__class__.get_wire_typeid())
@@ -235,8 +226,8 @@ class JsonObject(object):
           setattr(self, key, value)
 
   # noinspection PyShadowingBuiltins
-  def set_from_id(self, db_interface, id):
-    return self.set_from_dict(db_interface.find_by_id(id=id))
+  def set_from_id(self, my_collection, id):
+    return self.set_from_dict(my_collection.get(id))
 
   def to_json_map(self):
     """One convenient way of 'serializing' the object.
@@ -278,37 +269,36 @@ class JsonObject(object):
     # logging.debug(dict2)
     return dict1 == dict2
 
-  def update_collection(self, db_interface, user=None):
+  def update_collection(self, my_collection, user=None):
     """Do JSON validation and write to database."""
     self.set_type_recursively()
     if hasattr(self, "schema"):
-      self.validate(db_interface=db_interface, user=user)
-    updated_doc = db_interface.update_doc(self.to_json_map())
+      self.validate(my_collection=my_collection, user=user)
+    # updated_doc = my_collection.update_doc(self.to_json_map())
+    updated_doc = MyDbCollectionAdapter.update_doc(my_collection, self.to_json_map())
     updated_obj = JsonObject.make_from_dict(updated_doc)
     return updated_obj
 
-  def validate_deletion(self, db_interface, user=None):
+  def validate_deletion(self, my_collection, user=None):
     if not hasattr(self, "_id"):
       raise ValidationError("_id not present!")
 
-  def delete_in_collection(self, db_interface, user=None):
+  def delete_in_collection(self, my_collection, user=None):
     """
 
     To delete referrent items also, use appropriate method in JsonObjectNode.
-    :param db_interface:
+    :param my_collection:
     :param user:
     :return:
     """
-    self.validate_deletion(db_interface=db_interface, user=user)
-    import shutil
-    db_interface.delete_doc(self._id)
-    shutil.rmtree(path=self.get_external_storage_path(db_interface=db_interface), ignore_errors=True)
+    self.validate_deletion(my_collection=my_collection, user=user)
+    my_collection.delete_item(self._id)
 
-  def validate(self, db_interface=None, user=None):
+  def validate(self, my_collection=None, user=None):
     """Validate the JSON serialization of this object using the schema member. Called before database writes.
 
     :param user:
-    :param db_interface: Potentially useful in subclasses to perform validations (eg. is the target_id valid).
+    :param my_collection: Potentially useful in subclasses to perform validations (eg. is the target_id valid).
       This value may not be available: for example when called from the from_details methods.
 
     :return: a boolean.
@@ -349,17 +339,17 @@ class JsonObject(object):
 
   # noinspection PyShadowingBuiltins
   @classmethod
-  def from_id(cls, id, db_interface):
+  def from_id(cls, id, my_collection):
     """Returns None if nothing is found."""
-    item_dict = db_interface.find_by_id(id=id)
+    item_dict = my_collection.get(id)
     item = None
     if item_dict is not None:
       item = cls.make_from_dict(item_dict)
     return item
 
   @classmethod
-  def add_indexes(cls, db_interface):
-    db_interface.add_index(keys_dict={
+  def add_indexes(cls, my_collection):
+    my_collection.create_index(keys_dict={
       "jsonClass": 1
     }, index_name="jsonClass")
 
@@ -393,21 +383,21 @@ class Target(JsonObject):
     "required": ["container_id"]
   })
 
-  def get_target_entity(self, db_interface):
-    """Returns null if db_interface doesnt have any such entity."""
-    return JsonObject.from_id(id=self.container_id, db_interface=db_interface)
+  def get_target_entity(self, my_collection):
+    """Returns null if my_collection doesnt have any such entity."""
+    return JsonObject.from_id(id=self.container_id, my_collection=my_collection)
 
-  def check_target_class(self, db_interface, allowed_types, targeting_obj):
-    if db_interface is not None:
-      target_entity = self.get_target_entity(db_interface=db_interface)
+  def check_target_class(self, my_collection, allowed_types, targeting_obj):
+    if my_collection is not None:
+      target_entity = self.get_target_entity(my_collection=my_collection)
       if not check_class(obj=target_entity, allowed_types=allowed_types):
         raise TargetValidationError(allowed_types=allowed_types, targeting_obj=targeting_obj,
                                     target_obj=target_entity)
 
   @classmethod
-  def check_target_classes(cls, targets_to_check, db_interface, allowed_types, targeting_obj):
+  def check_target_classes(cls, targets_to_check, my_collection, allowed_types, targeting_obj):
     for target in targets_to_check:
-      target.check_target_class(db_interface=db_interface, allowed_types=allowed_types, targeting_obj=targeting_obj)
+      target.check_target_class(my_collection=my_collection, allowed_types=allowed_types, targeting_obj=targeting_obj)
 
   @classmethod
   def from_details(cls, container_id):
@@ -467,45 +457,45 @@ class DataSource(JsonObject):
     source.validate_schema()
     return source
 
-  def infer_by_admin(self, db_interface=None, user=None):
+  def infer_by_admin(self, my_collection=None, user=None):
     if not hasattr(self, "by_admin"):
       # source_type is a compulsory attribute, because that validation is done separately and a suitable error is thrown.
       if hasattr(self, "source_type") and self.source_type == "user_supplied":
-        if user is not None and db_interface is not None:
+        if user is not None and my_collection is not None:
           if not hasattr(self, "id") or self.id in user.get_user_ids():
-            self.by_admin = user.is_admin(service=db_interface.db_name_frontend)
+            self.by_admin = user.is_admin(service=my_collection.name)
 
-  def setup_source(self, db_interface=None, user=None):
+  def setup_source(self, my_collection=None, user=None):
     if not hasattr(self, "source_type"):
       self.source_type = "user_supplied" if (user is not None and user.is_human()) else "system_inferred"
     if not hasattr(self, "id") and user is not None and user.get_first_user_id_or_none() is not None:
       self.id = user.get_first_user_id_or_none()
 
-  def is_id_impersonated_by_non_admin(self, db_interface=None, user=None):
+  def is_id_impersonated_by_non_admin(self, my_collection=None, user=None):
     """A None user is assumed to be a valid authorized backend script."""
-    if hasattr(self, "id") and user is not None and db_interface is not None:
-      if self.id not in user.get_user_ids() and not user.is_admin(service=db_interface.db_name_frontend):
+    if hasattr(self, "id") and user is not None and my_collection is not None:
+      if self.id not in user.get_user_ids() and not user.is_admin(service=my_collection.name):  # TODO service should be param in my_collection
         return True
     return False
 
-  def validate(self, db_interface=None, user=None):
-    if self.is_id_impersonated_by_non_admin(db_interface=db_interface, user=user):
+  def validate(self, my_collection=None, user=None):
+    if self.is_id_impersonated_by_non_admin(my_collection=my_collection, user=user):
       raise ValidationError("Impersonation by %(id_1)s as %(id_2)s not allowed for this user." % dict(id_1=user.get_first_user_id_or_none(), id_2=self.id))
     if "user" in self.source_type and not hasattr(self, "id"):
       raise ValidationError("User id compulsary for user sources.")
     if hasattr(self, "source_type") and self.source_type == "system_inferred":
-      if user is not None and user.is_human() and not user.is_admin(service=db_interface.db_name_frontend):
+      if user is not None and user.is_human() and not user.is_admin(service=my_collection.name):
         raise ValidationError("Impersonation by %(id_1)s as a bot not allowed for this user." % dict(id_1=user.get_first_user_id_or_none()))
-    super(DataSource, self).validate(db_interface=db_interface, user=user)
+    super(DataSource, self).validate(my_collection=my_collection, user=user)
 
     # Only if the writer user is an admin or None, allow by_admin to be set to true (even when the admin is impersonating another user).
     if hasattr(self, "by_admin") and self.by_admin:
-      if user is not None and db_interface is not None and not user.is_admin(service=db_interface.db_name_frontend):
+      if user is not None and my_collection is not None and not user.is_admin(service=my_collection.name):
         raise ValidationError("Impersonation by %(id_1)s of %(id_2)s not allowed for this user." % dict(id_1=user.get_first_user_id_or_none(), id_2=self.id))
 
       # source_type is a compulsory attribute, because that validation is done separately and a suitable error is thrown.
       if hasattr(self, "source_type") and self.source_type != "user_supplied":
-        if user is not None and db_interface is not None:
+        if user is not None and my_collection is not None:
           raise ValidationError("non user_supplied source_type cannot be an admin.")
 
 
@@ -541,28 +531,28 @@ class UllekhanamJsonObject(JsonObject):
     super(UllekhanamJsonObject, self).__init__()
     self.source = DataSource()
 
-  def detect_illegal_takeover(self, db_interface=None, user=None):
-    if hasattr(self, "_id") and db_interface is not None:
-      old_obj = JsonObject.from_id(id=self._id, db_interface=db_interface)
+  def detect_illegal_takeover(self, my_collection=None, user=None):
+    if hasattr(self, "_id") and my_collection is not None:
+      old_obj = JsonObject.from_id(id=self._id, my_collection=my_collection)
       if old_obj is not None and not old_obj.is_editable_by_others():
         if hasattr(self.source, "id") and hasattr(old_obj.source, "id") and self.source.id != old_obj.source.id:
-          if user is not None and not user.is_admin(service=db_interface.db_name_frontend):
+          if user is not None and not user.is_admin(service=my_collection.name):
             raise ValidationError("{} cannot take over {}'s annotation for editing or deleting under a non-admin user {}'s authority".format(self.source.id, old_obj.source.id, user.get_first_user_id_or_none))
 
-  def update_collection(self, db_interface, user=None):
-    self.source.setup_source(db_interface=db_interface, user=user)
-    return super(UllekhanamJsonObject, self).update_collection(db_interface=db_interface, user=user)
+  def update_collection(self, my_collection, user=None):
+    self.source.setup_source(my_collection=my_collection, user=user)
+    return super(UllekhanamJsonObject, self).update_collection(my_collection=my_collection, user=user)
 
-  def validate_deletion_ignoring_targetters(self, db_interface, user=None):
-    super(UllekhanamJsonObject, self).validate_deletion(db_interface=db_interface, user=user)
+  def validate_deletion_ignoring_targetters(self, my_collection, user=None):
+    super(UllekhanamJsonObject, self).validate_deletion(my_collection=my_collection, user=user)
     if user is not None:
       self.source.id = user.get_first_user_id_or_none()
-    self.detect_illegal_takeover(db_interface=db_interface, user=user)
+    self.detect_illegal_takeover(my_collection=my_collection, user=user)
 
-  def validate_deletion(self, db_interface, user=None):
-    # Not calling: super(UllekhanamJsonObject, self).validate_deletion(db_interface=db_interface, user=user) as it's called inside the below.
-    self.validate_deletion_ignoring_targetters(db_interface=db_interface, user=user)
-    targetting_entities = self.get_targetting_entities(db_interface=db_interface)
+  def validate_deletion(self, my_collection, user=None):
+    # Not calling: super(UllekhanamJsonObject, self).validate_deletion(my_collection=my_collection, user=user) as it's called inside the below.
+    self.validate_deletion_ignoring_targetters(my_collection=my_collection, user=user)
+    targetting_entities = self.get_targetting_entities(my_collection=my_collection)
     if len(targetting_entities) > 0:
       raise ValidationError("Unsafe deletion of %s: %d entities refer to this entity. Delete them first" % (self._id, len(targetting_entities)))
 
@@ -570,19 +560,19 @@ class UllekhanamJsonObject(JsonObject):
   def get_allowed_target_classes(cls):
     return []
 
-  def validate_targets(self, db_interface):
+  def validate_targets(self, my_collection):
     allowed_types = self.get_allowed_target_classes()
     targets_to_check = self.targets if hasattr(self, "targets") else []
-    Target.check_target_classes(targets_to_check=targets_to_check, db_interface=db_interface, allowed_types=allowed_types, targeting_obj=self)
+    Target.check_target_classes(targets_to_check=targets_to_check, my_collection=my_collection, allowed_types=allowed_types, targeting_obj=self)
 
 
-  def validate(self, db_interface=None, user=None):
-    super(UllekhanamJsonObject, self).validate(db_interface=db_interface, user=user)
-    self.validate_targets(db_interface=db_interface)
-    self.source.validate(db_interface=db_interface, user=user)
-    self.detect_illegal_takeover(db_interface=db_interface, user=user)
+  def validate(self, my_collection=None, user=None):
+    super(UllekhanamJsonObject, self).validate(my_collection=my_collection, user=user)
+    self.validate_targets(my_collection=my_collection)
+    self.source.validate(my_collection=my_collection, user=user)
+    self.detect_illegal_takeover(my_collection=my_collection, user=user)
 
-  def get_targetting_entities(self, db_interface, entity_type=None):
+  def get_targetting_entities(self, my_collection, entity_type=None):
     # Alas, the below shows that no index is used:
     # curl -sg vedavaapi.org:5984/vedavaapi_ullekhanam_db/_explain -H content-type:application/json -d '{"selector": {"targets": {"$elemMatch": {"container_id": "4b9f454f5aa5414e82506525d015ac68"}}}}'|jq
     # TODO: Use index.
@@ -593,15 +583,15 @@ class UllekhanamJsonObject(JsonObject):
         }
       }
     }
-    targetting_objs = [JsonObject.make_from_dict(item) for item in db_interface.find(find_filter)]
+    targetting_objs = [JsonObject.make_from_dict(item) for item in my_collection.find(find_filter)]
     if entity_type is not None:
       targetting_objs = list(filter(lambda obj: isinstance(obj, json_class_index[entity_type]), targetting_objs))
     return targetting_objs
 
   @classmethod
-  def add_indexes(cls, db_interface):
-    super(UllekhanamJsonObject, cls).add_indexes(db_interface=db_interface)
-    db_interface.add_index(keys_dict={
+  def add_indexes(cls, my_collection):
+    super(UllekhanamJsonObject, cls).add_indexes(my_collection=my_collection)
+    my_collection.create_index(keys_dict={
       "targets.container_id": 1
     }, index_name="targets_container_id")
 
@@ -647,9 +637,9 @@ class JsonObjectNode(JsonObject):
     for child in self.children:
       child.validate_children_types()
 
-  def validate(self, db_interface=None, user=None):
+  def validate(self, my_collection=None, user=None):
     # Note that the below recursively validates ALL members (including content and children).
-    super(JsonObjectNode, self).validate(db_interface=db_interface, user=user)
+    super(JsonObjectNode, self).validate(my_collection=my_collection, user=user)
     self.validate_children_types()
 
   @classmethod
@@ -662,15 +652,15 @@ class JsonObjectNode(JsonObject):
     node.content = content
     # logging.debug(check_list_item_types(children, [JsonObjectNode]))
     node.children = children
-    node.validate(db_interface=None)
+    node.validate(my_collection=None)
     return node
 
-  def update_collection(self, db_interface, user=None):
+  def update_collection(self, my_collection, user=None):
     """Special info: Mutates this object."""
     # But we don't call self.validate() as child.content.targets (required of Annotations) mayn't be set.
     self.validate_children_types()
     # The content is validated within the below call.
-    self.content = self.content.update_collection(db_interface=db_interface, user=user)
+    self.content = self.content.update_collection(my_collection=my_collection, user=user)
     for child in self.children:
       # Initialize the target array if it does not already exist.
       if (not hasattr(child.content, "targets")) or child.content.targets is None or len(child.content.targets) == 0:
@@ -678,7 +668,7 @@ class JsonObjectNode(JsonObject):
 
       assert len(child.content.targets) == 1
       child.content.targets[0].container_id = str(self.content._id)
-      child.update_collection(db_interface=db_interface, user=user)
+      child.update_collection(my_collection=my_collection, user=user)
 
   def affected_user_ids(self):
     if not hasattr(self, "content"):
@@ -690,34 +680,34 @@ class JsonObjectNode(JsonObject):
       user_ids = user_ids + child.affected_user_ids()
     return user_ids
 
-  def validate_deletion(self, db_interface, user=None):
+  def validate_deletion(self, my_collection, user=None):
     # Deliberately not calling super.validate_deletion - the node does not exist in the database.
     if not hasattr(self, "content"):
       raise ValidationError("This is a node with no content! Not allowed.")
-    self.content.validate_deletion_ignoring_targetters(db_interface=db_interface, user=user)
+    self.content.validate_deletion_ignoring_targetters(my_collection=my_collection, user=user)
     for child in self.children:
-      child.validate_deletion(db_interface=db_interface, user=user)
-    self.content = JsonObject.from_id(id = self.content._id, db_interface=db_interface)
+      child.validate_deletion(my_collection=my_collection, user=user)
+    self.content = JsonObject.from_id(id = self.content._id, my_collection=my_collection)
     affected_users = self.affected_user_ids()
     # logging.debug(affected_users)
-    if len(set(affected_users)) > 2 and not user.is_admin(service=db_interface.db_name_frontend):
+    if len(set(affected_users)) > 2 and not user.is_admin(service=my_collection.name):
       raise ValidationError("This deletion affects more than 2 other users. Only admins can do that.")
 
-  def delete_in_collection(self, db_interface, user=None):
-    self.validate_deletion(db_interface=db_interface, user=user)
-    self.fill_descendents(db_interface=db_interface, depth=100)
+  def delete_in_collection(self, my_collection, user=None):
+    self.validate_deletion(my_collection=my_collection, user=user)
+    self.fill_descendents(my_collection=my_collection, depth=100)
     for child in self.children:
-      child.delete_in_collection(db_interface=db_interface, user=user)
+      child.delete_in_collection(my_collection=my_collection, user=user)
     # Delete or disconnect children before deleting oneself.
-    self.content.delete_in_collection(db_interface=db_interface, user=user)
+    self.content.delete_in_collection(my_collection=my_collection, user=user)
 
-  def fill_descendents(self, db_interface, depth=10, entity_type=None):
-    targetting_objs = self.content.get_targetting_entities(db_interface=db_interface, entity_type=entity_type)
+  def fill_descendents(self, my_collection, depth=10, entity_type=None):
+    targetting_objs = self.content.get_targetting_entities(my_collection=my_collection, entity_type=entity_type)
     self.children = []
     if depth > 0:
       for targetting_obj in targetting_objs:
         child = JsonObjectNode.from_details(content=targetting_obj)
-        child.fill_descendents(db_interface=db_interface, depth=depth - 1, entity_type=entity_type)
+        child.fill_descendents(my_collection=my_collection, depth=depth - 1, entity_type=entity_type)
         self.children.append(child)
 
   def recursively_delete_attr(self, field_name):
